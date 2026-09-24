@@ -16,7 +16,6 @@ export default async function handler(req, res) {
       });
     }
 
-    // Valida a URL recebida
     try {
       const parsed = new URL(imageUrl);
 
@@ -30,7 +29,6 @@ export default async function handler(req, res) {
       });
     }
 
-    // Usa a MESMA variável de ambiente da API RemoveBG
     const apiKey = process.env.REMOVEBG_API_KEY;
 
     if (!apiKey) {
@@ -40,7 +38,6 @@ export default async function handler(req, res) {
       });
     }
 
-    // API BNW verdadeira
     const apiUrl =
       "https://zero-two-apis.store/api/canvas/bnw" +
       "?link=" + encodeURIComponent(imageUrl) +
@@ -51,28 +48,33 @@ export default async function handler(req, res) {
     const contentType =
       response.headers.get("content-type") || "";
 
-    const body = await response.arrayBuffer();
+    const body = await response.text();
 
-    // Repassa o status original
-    res.status(response.status);
+    if (!response.ok) {
+      return res.status(502).json({
+        success: false,
+        external_status: response.status,
+        external_content_type: contentType,
+        external_response: body.slice(0, 2000),
+        external_url: apiUrl.replace(
+          encodeURIComponent(apiKey),
+          "***"
+        )
+      });
+    }
 
-    // Repassa o Content-Type original
-    res.setHeader(
-      "Content-Type",
-      contentType || "application/octet-stream"
-    );
+    res.status(200);
+
+    if (contentType) {
+      res.setHeader("Content-Type", contentType);
+    }
 
     res.setHeader(
       "Cache-Control",
       "public, max-age=300"
     );
 
-    res.setHeader(
-      "Content-Length",
-      body.byteLength
-    );
-
-    return res.send(Buffer.from(body));
+    return res.send(body);
 
   } catch (error) {
     return res.status(500).json({
