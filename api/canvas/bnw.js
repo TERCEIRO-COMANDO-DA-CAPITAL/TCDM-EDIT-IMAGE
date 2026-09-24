@@ -16,19 +16,6 @@ export default async function handler(req, res) {
       });
     }
 
-    try {
-      const parsed = new URL(imageUrl);
-
-      if (!["http:", "https:"].includes(parsed.protocol)) {
-        throw new Error();
-      }
-    } catch {
-      return res.status(400).json({
-        success: false,
-        error: "A URL informada é inválida."
-      });
-    }
-
     const apiKey = process.env.REMOVEBG_API_KEY;
 
     if (!apiKey) {
@@ -43,38 +30,20 @@ export default async function handler(req, res) {
       "?link=" + encodeURIComponent(imageUrl) +
       "&apikey=" + encodeURIComponent(apiKey);
 
-    const response = await fetch(apiUrl);
+    const response = await fetch(apiUrl, {
+      method: "GET"
+    });
 
     const contentType =
-      response.headers.get("content-type") || "";
+      response.headers.get("content-type") ||
+      "application/octet-stream";
 
-    const body = await response.text();
+    res.status(response.status);
+    res.setHeader("Content-Type", contentType);
 
-    if (!response.ok) {
-      return res.status(502).json({
-        success: false,
-        external_status: response.status,
-        external_content_type: contentType,
-        external_response: body.slice(0, 2000),
-        external_url: apiUrl.replace(
-          encodeURIComponent(apiKey),
-          "***"
-        )
-      });
-    }
-
-    res.status(200);
-
-    if (contentType) {
-      res.setHeader("Content-Type", contentType);
-    }
-
-    res.setHeader(
-      "Cache-Control",
-      "public, max-age=300"
-    );
-
-    return res.send(body);
+    return response.body
+      ? res.send(Buffer.from(await response.arrayBuffer()))
+      : res.end();
 
   } catch (error) {
     return res.status(500).json({
