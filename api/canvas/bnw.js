@@ -2,55 +2,83 @@ export default async function handler(req, res) {
   try {
     if (req.method !== "GET") {
       return res.status(405).json({
-        status: false,
-        error: "Method not allowed"
+        success: false,
+        error: "Use GET."
       });
     }
 
-    const { link, apikey } = req.query;
+    const imageUrl = req.query.link;
 
-    if (!link) {
+    if (!imageUrl) {
       return res.status(400).json({
-        status: false,
-        error: "Missing link parameter"
+        success: false,
+        error: "Informe ?link=URL_DA_IMAGEM"
       });
     }
 
-    const key = apikey || process.env.BNW_API_KEY;
+    // Valida a URL recebida
+    try {
+      const parsed = new URL(imageUrl);
 
-    if (!key) {
-      return res.status(401).json({
-        status: false,
-        error: "API key not configured"
+      if (!["http:", "https:"].includes(parsed.protocol)) {
+        throw new Error();
+      }
+    } catch {
+      return res.status(400).json({
+        success: false,
+        error: "A URL informada é inválida."
       });
     }
 
+    // Usa a MESMA variável de ambiente da API RemoveBG
+    const apiKey = process.env.REMOVEBG_API_KEY;
+
+    if (!apiKey) {
+      return res.status(500).json({
+        success: false,
+        error: "REMOVEBG_API_KEY não configurada."
+      });
+    }
+
+    // API BNW verdadeira
     const apiUrl =
-      `https://zero-two-apis.store/api/canvas/bnw?link=${encodeURIComponent(link)}&apikey=${encodeURIComponent(key)}`;
+      "https://zero-two-apis.store/api/canvas/bnw" +
+      "?link=" + encodeURIComponent(imageUrl) +
+      "&apikey=" + encodeURIComponent(apiKey);
 
     const response = await fetch(apiUrl);
 
-    const contentType = response.headers.get("content-type") || "";
+    const contentType =
+      response.headers.get("content-type") || "";
 
-    const body = await response.text();
+    const body = await response.arrayBuffer();
 
+    // Repassa o status original
     res.status(response.status);
 
-    if (contentType.includes("application/json")) {
-      try {
-        return res.json(JSON.parse(body));
-      } catch {
-        return res.send(body);
-      }
-    }
+    // Repassa o Content-Type original
+    res.setHeader(
+      "Content-Type",
+      contentType || "application/octet-stream"
+    );
 
-    return res.send(body);
+    res.setHeader(
+      "Cache-Control",
+      "public, max-age=300"
+    );
+
+    res.setHeader(
+      "Content-Length",
+      body.byteLength
+    );
+
+    return res.send(Buffer.from(body));
 
   } catch (error) {
     return res.status(500).json({
-      status: false,
-      error: "Proxy error",
-      message: error.message
+      success: false,
+      error: "Erro interno na ponte.",
+      details: error.message
     });
   }
 }
