@@ -19,14 +19,16 @@ export default async function handler(req, res) {
             });
         }
 
-        if (amount === undefined) {
+        if (amount === undefined || amount === "") {
             return res.status(400).json({
                 success: false,
                 error: "Informe ?amount=VALOR"
             });
         }
 
-        const saturation = Number(amount);
+        const saturation = Number(
+            String(amount).replace(",", ".")
+        );
 
         if (
             !Number.isFinite(saturation) ||
@@ -35,7 +37,8 @@ export default async function handler(req, res) {
         ) {
             return res.status(400).json({
                 success: false,
-                error: "Amount deve ser um número entre 0 e 10."
+                error: "Amount deve ser um número entre 0 e 10.",
+                received: amount
             });
         }
 
@@ -56,11 +59,17 @@ export default async function handler(req, res) {
         ) {
             return res.status(400).json({
                 success: false,
-                error: "A URL precisa começar com http:// ou https://."
+                error: "A URL precisa usar http ou https."
             });
         }
 
-        const response = await fetch(imageUrl.toString());
+        const response = await fetch(imageUrl.toString(), {
+            method: "GET",
+            redirect: "follow",
+            headers: {
+                "User-Agent": "Mozilla/5.0 TCDM-Image-API"
+            }
+        });
 
         if (!response.ok) {
             return res.status(400).json({
@@ -90,10 +99,17 @@ export default async function handler(req, res) {
                 })
                 .png()
                 .toBuffer();
-        } catch {
+
+        } catch (error) {
+            console.error(
+                "SHARP ERROR:",
+                error
+            );
+
             return res.status(400).json({
                 success: false,
-                error: "O conteúdo recebido não é uma imagem válida."
+                error: "Não foi possível processar esta imagem.",
+                details: error.message
             });
         }
 
@@ -115,32 +131,38 @@ export default async function handler(req, res) {
         return res.status(200).send(output);
 
     } catch (error) {
-        console.error("SATURATION ERROR:", error);
+        console.error(
+            "SATURATION ERROR:",
+            error
+        );
 
         return res.status(500).json({
             success: false,
-            error: "Erro interno ao aumentar a saturação.",
+            error: "Erro interno na API de saturação.",
             details: error.message
         });
     }
 }
 
-Exemplos
+Seu BDFD continua assim
 
-/api/saturation?url=https://site.com/foto.jpg&amount=1
+$httpGet[https://tcdm-edit-image.vercel.app/api/saturation?url=$url[encode;$input[url]]&amount=$input[amount]]
 
-Original.
+E o link da imagem:
 
-/api/saturation?url=https://site.com/foto.jpg&amount=2
+https://tcdm-edit-image.vercel.app/api/saturation?url=$url[encode;$input[url]]&amount=$input[amount]
 
-2× a saturação.
+O que mudou
 
-/api/saturation?url=https://site.com/foto.jpg&amount=3
+- Aceita "2" normalmente.
+- Aceita "2.5".
+- Aceita "2,5".
+- Segue redirecionamentos.
+- Envia "User-Agent", ajudando com alguns CDNs.
+- Se o Sharp rejeitar a imagem, agora retorna 400 com o erro real, em vez de transformar o problema em "500".
+- Continua usando "0" até "10".
+- Continua retornando PNG.
 
-Cores bem mais fortes.
+O Sharp documenta "saturation" como um multiplicador, então "1" mantém a saturação, "2" duplica e "0" remove a saturação.
 
-/api/saturation?url=https://site.com/foto.jpg&amount=0
-
-Sem saturação, ficando em escala de cinza.
-
-O bom aqui é que ele não depende da extensão ".jpg" ou ".png". Ele baixa os bytes e deixa o Sharp identificar/processar a imagem, evitando aquele pequeno circo de URLs que dizem ser imagem mas entregam HTML.
+Se depois desse código aparecer outro erro, o campo "details" vai entregar exatamente o motivo. Finalmente teremos uma pista em vez do clássico "500: parabéns, nada explica nada".
